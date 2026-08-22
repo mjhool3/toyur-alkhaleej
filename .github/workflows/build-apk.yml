@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK from ZIP
 
 on:
   push:
@@ -24,32 +24,46 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build Project Dynamically
+      - name: Auto Extract ZIP & Locate package.json
         run: |
-          # البحث الشامل عن مكان package.json
-          TARGET_FILE=$(find . -name "package.json" -not -path "*/node_modules/*" | head -n 1)
+          # 1. البحث عن أي ملف ZIP مرفوع وفك ضغطه
+          ZIP_FILE=$(find . -maxdepth 3 -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "تم العثور على ملف مضغوط: $ZIP_FILE"
+            mkdir -p extracted
+            unzip -o "$ZIP_FILE" -d extracted/
+          fi
+
+          # 2. البحث المباشر عن package.json داخل المشروع المرفوع أو المفكوك
+          PKG_PATH=$(find . -name "package.json" -not -path "*/node_modules/*" | head -n 1)
           
-          if [ -z "$TARGET_FILE" ]; then
-            echo "::error::لم يتم العثور على package.json! طباعة شجرة الملفات:"
-            find . -maxdepth 3 -not -path '*/.*'
+          if [ -z "$PKG_PATH" ]; then
+            echo "::error::لم يتم العثور على package.json إطلاقاً!"
             exit 1
           fi
 
-          # الانتقال للمجلد الصحيح
-          TARGET_DIR=$(dirname "$TARGET_FILE")
-          echo "تم العثور على المشروع في: $TARGET_DIR"
-          cd "$TARGET_DIR"
+          WORK_DIR=$(dirname "$PKG_PATH")
+          echo "تم تحديد مجلد العمل الرئيسي: $WORK_DIR"
+          
+          # حفظ المسار للاستخدام في الخطوات التالية
+          echo "PROJECT_DIR=$WORK_DIR" >> $GITHUB_ENV
 
-          # تثبيت الحزم وبناء الويب
+      - name: Install & Build Web App
+        run: |
+          cd "$PROJECT_DIR"
           npm install --legacy-peer-deps
           npm run build --if-present
 
-          # مزامنة كاباسيتور إن وجد
+      - name: Sync Capacitor
+        run: |
+          cd "$PROJECT_DIR"
           if [ -f "capacitor.config.json" ] || [ -f "capacitor.config.ts" ]; then
             npx cap sync android || true
           fi
 
-          # بناء الأندرويد
+      - name: Build Android APK
+        run: |
+          cd "$PROJECT_DIR"
           if [ -d "android" ]; then
             cd android
             if [ ! -f "gradlew" ]; then
@@ -58,7 +72,7 @@ jobs:
             chmod +x gradlew
             ./gradlew assembleDebug --stacktrace
           else
-            echo "::error::لم يتم العثور على مجلد android داخل $TARGET_DIR!"
+            echo "::error::لم يتم العثور على مجلد android داخل $PROJECT_DIR"
             exit 1
           fi
 
