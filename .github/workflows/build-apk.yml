@@ -8,6 +8,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: makashat
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,13 +22,13 @@ jobs:
         with:
           node-version: 18
 
-      - name: Setup Java JDK
+      - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Dependencies & Build
+      - name: Install Dependencies & Build Web
         run: |
           npm install --legacy-peer-deps
           npm run build --if-present
@@ -34,10 +39,9 @@ jobs:
             npx cap sync android || true
           fi
 
-      - name: Build APK
+      - name: Build Android APK
         run: |
-          if [ -d "android" ]; then cd android; fi
-          if [ ! -f "gradlew" ]; then gradle wrapper --gradle-version 8.5; fi
+          cd android
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
