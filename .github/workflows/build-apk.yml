@@ -23,18 +23,38 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Dependencies and Build
+      - name: Locate Project and Build APK
         run: |
-          npm install
-          npm run build
+          # البحث عن مكان package.json والدخول إليه
+          PACKAGE_PATH=$(find . -name "package.json" -not -path "*/node_modules/*" | head -n 1)
+          
+          if [ -z "$PACKAGE_PATH" ]; then
+            echo "خطأ: لم يتم العثور على package.json في المشروع!"
+            exit 1
+          fi
+          
+          PROJECT_DIR=$(dirname "$PACKAGE_PATH")
+          echo "تم العثور على مشروع Node في: $PROJECT_DIR"
+          cd "$PROJECT_DIR"
 
-      - name: Sync Capacitor
-        run: |
-          npx cap sync android
+          # تثبيت الحزم وبناء الويب
+          npm install --legacy-peer-deps
+          npm run build --if-present
 
-      - name: Build Android APK
-        run: |
-          cd android
+          # المزامنة مع كاباسيتور إذا وجد
+          if [ -f "capacitor.config.json" ] || [ -f "capacitor.config.ts" ]; then
+            npx cap sync android || true
+          fi
+
+          # الدخول لمجلد الأندرويد وبناء التطبيق
+          if [ -d "android" ]; then
+            cd android
+          fi
+
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper --gradle-version 8.5
+          fi
+
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
@@ -42,4 +62,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: '**/build/outputs/apk/debug/*.apk'
