@@ -24,23 +24,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Auto Detect Directory & Build APK
+      - name: Build Project from repo-root
         run: |
-          # البحث عن ملف package.json في المستودع
-          PKG_FILE=$(find . -name "package.json" -not -path "*/node_modules/*" | head -n 1)
-          
-          if [ -z "$PKG_FILE" ]; then
-            echo "::error::لم يتم العثور على package.json في أي مكان داخل المستودع!"
-            echo "محتويات المستودع حالياً هي:"
-            ls -la
-            exit 1
+          # الدخول لمجلد repo-root
+          cd repo-root
+
+          # إذا كان هناك مجلد makashat بالداخل ندخل عليه، وإلا نبقى في repo-root
+          if [ -d "makashat" ]; then
+            cd makashat
           fi
 
-          TARGET_DIR=$(dirname "$PKG_FILE")
-          echo "تم العثور على مشروع Node في: $TARGET_DIR"
-          cd "$TARGET_DIR"
+          echo "المجلد الحالي للبناء هو: $(pwd)"
 
-          # تثبيت الحزم وبناء مشروع الويب
+          # تثبيت الحزم وبناء الويب
           npm install --legacy-peer-deps
           npm run build --if-present
 
@@ -49,13 +45,16 @@ jobs:
             npx cap sync android || true
           fi
 
-          # الانتقال لمجلد الأندرويد والبناء
+          # بناء الأندرويد
           if [ -d "android" ]; then
             cd android
+            if [ ! -f "gradlew" ]; then
+              gradle wrapper --gradle-version 8.5
+            fi
             chmod +x gradlew
             ./gradlew assembleDebug --stacktrace
           else
-            echo "::error::لم يتم العثور على مجلد android داخل $TARGET_DIR"
+            echo "::error::لم يتم العثور على مجلد android!"
             exit 1
           fi
 
