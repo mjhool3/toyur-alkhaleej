@@ -41,34 +41,39 @@ jobs:
           WORK_DIR=$(dirname "$PKG_PATH")
           echo "PROJECT_DIR=$WORK_DIR" >> $GITHUB_ENV
 
-      - name: Install & Build Web App (Bypass TS Check)
+      - name: Install & Build Web App
         run: |
           cd "$PROJECT_DIR"
           npm install --legacy-peer-deps
-          # البناء مباشرة عبر Vite مع التغاضي عن أخطاء TypeScript
           npx vite build || npm run build --if-present
 
-      - name: Sync Capacitor
+      - name: Add Android Platform if Missing
         run: |
           cd "$PROJECT_DIR"
-          if [ -f "capacitor.config.json" ] || [ -f "capacitor.config.ts" ]; then
-            npx cap sync android || true
+          # تثبيت مكتبات capacitor الرسمية إن لم تكن موجودة
+          npm install @capacitor/core @capacitor/cli @capacitor/android --legacy-peer-deps
+          
+          # تهيئة capacitor إذا لم يتم تهيئته سابقاً
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            npx cap init "Makashat" "com.makashat.app" --web-dir "dist"
           fi
+
+          # إنشاء مجلد android إذا كان غير موجود
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+
+          # مزامنة الملفات المبنية مع مجلد الأندرويد
+          npx cap sync android
 
       - name: Build Android APK
         run: |
-          cd "$PROJECT_DIR"
-          if [ -d "android" ]; then
-            cd android
-            if [ ! -f "gradlew" ]; then
-              gradle wrapper --gradle-version 8.5
-            fi
-            chmod +x gradlew
-            ./gradlew assembleDebug --stacktrace
-          else
-            echo "::error::لم يتم العثور على مجلد android داخل $PROJECT_DIR"
-            exit 1
+          cd "$PROJECT_DIR/android"
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper --gradle-version 8.5
           fi
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
