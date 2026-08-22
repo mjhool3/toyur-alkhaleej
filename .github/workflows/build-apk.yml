@@ -24,23 +24,27 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build Project from repo-root
+      - name: Build Project Dynamically
         run: |
-          # الدخول لمجلد repo-root
-          cd repo-root
-
-          # إذا كان هناك مجلد makashat بالداخل ندخل عليه، وإلا نبقى في repo-root
-          if [ -d "makashat" ]; then
-            cd makashat
+          # البحث الشامل عن مكان package.json
+          TARGET_FILE=$(find . -name "package.json" -not -path "*/node_modules/*" | head -n 1)
+          
+          if [ -z "$TARGET_FILE" ]; then
+            echo "::error::لم يتم العثور على package.json! طباعة شجرة الملفات:"
+            find . -maxdepth 3 -not -path '*/.*'
+            exit 1
           fi
 
-          echo "المجلد الحالي للبناء هو: $(pwd)"
+          # الانتقال للمجلد الصحيح
+          TARGET_DIR=$(dirname "$TARGET_FILE")
+          echo "تم العثور على المشروع في: $TARGET_DIR"
+          cd "$TARGET_DIR"
 
           # تثبيت الحزم وبناء الويب
           npm install --legacy-peer-deps
           npm run build --if-present
 
-          # مزامنة كاباسيتور
+          # مزامنة كاباسيتور إن وجد
           if [ -f "capacitor.config.json" ] || [ -f "capacitor.config.ts" ]; then
             npx cap sync android || true
           fi
@@ -54,11 +58,11 @@ jobs:
             chmod +x gradlew
             ./gradlew assembleDebug --stacktrace
           else
-            echo "::error::لم يتم العثور على مجلد android!"
+            echo "::error::لم يتم العثور على مجلد android داخل $TARGET_DIR!"
             exit 1
           fi
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
