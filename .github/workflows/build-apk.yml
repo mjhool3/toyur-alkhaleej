@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [ "master", "main" ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
@@ -23,42 +23,25 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Locate Project and Build APK
+      - name: Install Dependencies & Build
         run: |
-          # البحث عن مكان package.json والدخول إليه
-          PACKAGE_PATH=$(find . -name "package.json" -not -path "*/node_modules/*" | head -n 1)
-          
-          if [ -z "$PACKAGE_PATH" ]; then
-            echo "خطأ: لم يتم العثور على package.json في المشروع!"
-            exit 1
-          fi
-          
-          PROJECT_DIR=$(dirname "$PACKAGE_PATH")
-          echo "تم العثور على مشروع Node في: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
-
-          # تثبيت الحزم وبناء الويب
           npm install --legacy-peer-deps
           npm run build --if-present
 
-          # المزامنة مع كاباسيتور إذا وجد
+      - name: Sync Capacitor
+        run: |
           if [ -f "capacitor.config.json" ] || [ -f "capacitor.config.ts" ]; then
             npx cap sync android || true
           fi
 
-          # الدخول لمجلد الأندرويد وبناء التطبيق
-          if [ -d "android" ]; then
-            cd android
-          fi
-
-          if [ ! -f "gradlew" ]; then
-            gradle wrapper --gradle-version 8.5
-          fi
-
+      - name: Build APK
+        run: |
+          if [ -d "android" ]; then cd android; fi
+          if [ ! -f "gradlew" ]; then gradle wrapper --gradle-version 8.5; fi
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
