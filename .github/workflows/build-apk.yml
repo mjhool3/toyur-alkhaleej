@@ -8,10 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    defaults:
-      run:
-        working-directory: makashat
 
     steps:
       - name: Checkout Code
@@ -28,22 +24,40 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Dependencies & Build Web
+      - name: Auto Detect Directory & Build APK
         run: |
+          # البحث عن ملف package.json في المستودع
+          PKG_FILE=$(find . -name "package.json" -not -path "*/node_modules/*" | head -n 1)
+          
+          if [ -z "$PKG_FILE" ]; then
+            echo "::error::لم يتم العثور على package.json في أي مكان داخل المستودع!"
+            echo "محتويات المستودع حالياً هي:"
+            ls -la
+            exit 1
+          fi
+
+          TARGET_DIR=$(dirname "$PKG_FILE")
+          echo "تم العثور على مشروع Node في: $TARGET_DIR"
+          cd "$TARGET_DIR"
+
+          # تثبيت الحزم وبناء مشروع الويب
           npm install --legacy-peer-deps
           npm run build --if-present
 
-      - name: Sync Capacitor
-        run: |
+          # مزامنة كاباسيتور
           if [ -f "capacitor.config.json" ] || [ -f "capacitor.config.ts" ]; then
             npx cap sync android || true
           fi
 
-      - name: Build Android APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          # الانتقال لمجلد الأندرويد والبناء
+          if [ -d "android" ]; then
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            echo "::error::لم يتم العثور على مجلد android داخل $TARGET_DIR"
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
